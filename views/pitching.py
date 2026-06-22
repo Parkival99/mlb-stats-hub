@@ -9,7 +9,7 @@ outings without any scraping.
 import datetime
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 from data_loader import get_mlb_pitching_stats, get_mlb_pitching_stats_range
 
 _RED = "#E63946"
@@ -66,29 +66,38 @@ def _leaderboard_table(df: pd.DataFrame, key: str):
 def _leader_charts(df: pd.DataFrame, ip_floor: float):
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("#### Strikeout Leaders")
+        st.markdown("#### Top 15 by Strikeouts")
         top = df.nlargest(15, "SO").sort_values("SO")
-        fig = px.bar(
-            top, x="SO", y="Name", orientation="h",
-            color="ERA", color_continuous_scale=_ERA_SCALE,
-            text="SO", labels={"SO": "Strikeouts"},
-        )
-        fig.update_traces(textposition="outside", cliponaxis=False)
+        fig = go.Figure(go.Bar(
+            x=top["SO"], y=top["Name"], orientation="h",
+            marker=dict(color=top["ERA"], colorscale=_ERA_SCALE,
+                        colorbar=dict(title="ERA", thickness=10)),
+            customdata=top["ERA"],
+            text=[int(v) for v in top["SO"]],
+            textposition="outside", cliponaxis=False,
+            hovertemplate="<b>%{y}</b><br>%{x} K · ERA %{customdata:.2f}<extra></extra>",
+        ))
         _style_plotly(fig)
-        fig.update_layout(yaxis_title=None)
+        fig.update_layout(xaxis_title="Strikeouts", yaxis_title="",
+                          margin=dict(l=20, r=60, t=40, b=20))
         st.plotly_chart(fig, width="stretch")
     with c2:
-        st.markdown("#### K/9 vs. ERA")
+        st.markdown("#### Top 15 by K/9 (qualified)")
         qual = df[df["IP"] >= ip_floor]
-        plot_df = qual if not qual.empty else df
-        fig2 = px.scatter(
-            plot_df, x="K9", y="ERA", size="IP", hover_name="Name",
-            color="WHIP", color_continuous_scale=_ERA_SCALE, size_max=24,
-            labels={"K9": "K/9", "ERA": "ERA"},
-        )
-        # Lower ERA is better — put the best arms at the top.
-        fig2.update_yaxes(autorange="reversed")
+        pool = qual if not qual.empty else df
+        top = pool.nlargest(15, "K9").sort_values("K9")
+        fig2 = go.Figure(go.Bar(
+            x=top["K9"], y=top["Name"], orientation="h",
+            marker=dict(color=top["ERA"], colorscale=_ERA_SCALE,
+                        colorbar=dict(title="ERA", thickness=10)),
+            customdata=top["ERA"],
+            text=[f"{v:.1f}" for v in top["K9"]],
+            textposition="outside", cliponaxis=False,
+            hovertemplate="<b>%{y}</b><br>K/9 %{x:.2f} · ERA %{customdata:.2f}<extra></extra>",
+        ))
         _style_plotly(fig2)
+        fig2.update_layout(xaxis_title="K / 9 IP", yaxis_title="",
+                           margin=dict(l=20, r=60, t=40, b=20))
         st.plotly_chart(fig2, width="stretch")
 
 

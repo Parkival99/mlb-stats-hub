@@ -9,7 +9,7 @@ crashed the app whenever the date range was widened.
 import datetime
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 from data_loader import (
     get_mlb_batting_stats,
     get_mlb_batting_stats_range,
@@ -110,28 +110,43 @@ def _leaderboard_table(df: pd.DataFrame, key: str):
 
 def _leader_charts(df: pd.DataFrame):
     c1, c2 = st.columns(2)
+    top = df.nlargest(15, "OPS").sort_values("OPS")  # ascending -> best on top
 
     with c1:
-        st.markdown("#### OPS Leaders")
-        top = df.nlargest(15, "OPS").sort_values("OPS")
-        fig = px.bar(
-            top, x="OPS", y="Name", orientation="h",
-            color="OPS", color_continuous_scale=_RED_SCALE,
-            text=top["OPS"].map(lambda v: f"{v:.3f}"),
-        )
-        fig.update_traces(textposition="outside", cliponaxis=False)
+        st.markdown("#### Top 15 by OPS")
+        fig = go.Figure(go.Bar(
+            x=top["OPS"], y=top["Name"], orientation="h",
+            marker=dict(color=top["OPS"], colorscale=_RED_SCALE,
+                        colorbar=dict(title="OPS", thickness=10)),
+            text=[f"{v:.3f}" for v in top["OPS"]],
+            textposition="outside", cliponaxis=False,
+            hovertemplate="<b>%{y}</b><br>OPS %{x:.3f}<extra></extra>",
+        ))
         _style_plotly(fig)
-        fig.update_layout(yaxis_title=None, xaxis_title="OPS", coloraxis_showscale=False)
+        fig.update_layout(xaxis_title="OPS", yaxis_title="",
+                          margin=dict(l=20, r=70, t=40, b=20))
         st.plotly_chart(fig, width="stretch")
 
     with c2:
-        st.markdown("#### Power vs. Contact")
-        fig2 = px.scatter(
-            df, x="AVG", y="SLG", size="PA", hover_name="Name",
-            color="HR", color_continuous_scale=_RED_SCALE,
-            size_max=26, labels={"AVG": "Batting Avg", "SLG": "Slugging"},
-        )
+        st.markdown("#### OPS Breakdown — On-Base vs. Slugging")
+        fig2 = go.Figure()
+        fig2.add_bar(x=top["OBP"], y=top["Name"], orientation="h", name="OBP",
+                     marker_color="#4C9BE6",
+                     hovertemplate="<b>%{y}</b><br>OBP %{x:.3f}<extra></extra>")
+        fig2.add_bar(x=top["SLG"], y=top["Name"], orientation="h", name="SLG",
+                     marker_color=_RED,
+                     hovertemplate="<b>%{y}</b><br>SLG %{x:.3f}<extra></extra>")
         _style_plotly(fig2)
+        fig2.update_layout(
+            barmode="stack", xaxis_title="OBP + SLG = OPS", yaxis_title="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
+            margin=dict(l=20, r=70, t=50, b=20),
+        )
+        # Label total OPS at the end of each stacked bar.
+        for name, obp, slg in zip(top["Name"], top["OBP"], top["SLG"]):
+            fig2.add_annotation(x=obp + slg, y=name, text=f"{obp + slg:.3f}",
+                                showarrow=False, xanchor="left", xshift=4,
+                                font=dict(color="#EAEAEA", size=10))
         st.plotly_chart(fig2, width="stretch")
 
 
