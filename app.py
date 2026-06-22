@@ -296,7 +296,7 @@ with nav_right:
 
 page = st.radio(
     "Navigate",
-    ["Dashboard", "Batting Stats", "Pitching Stats", "Standings", "Player"],
+    ["Dashboard", "Matchups", "Batting Stats", "Pitching Stats", "Standings", "Player"],
     horizontal=True,
     label_visibility="collapsed",
     key="main_nav",
@@ -310,6 +310,9 @@ st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
 if page == "Dashboard":
     from views import dashboard
     dashboard.render()
+elif page == "Matchups":
+    from views import matchups
+    matchups.render()
 elif page == "Batting Stats":
     from views import batting
     batting.render()

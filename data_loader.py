@@ -522,16 +522,83 @@ def get_todays_games() -> tuple[str, list[dict]]:
                     "away_record": f'{g["teams"]["away"].get("leagueRecord", {}).get("wins", 0)}-{g["teams"]["away"].get("leagueRecord", {}).get("losses", 0)}',
                     "home_record": f'{g["teams"]["home"].get("leagueRecord", {}).get("wins", 0)}-{g["teams"]["home"].get("leagueRecord", {}).get("losses", 0)}',
                     "venue": g.get("venue", {}).get("name", ""),
+                    "away_team_id": g["teams"]["away"]["team"].get("id"),
+                    "home_team_id": g["teams"]["home"]["team"].get("id"),
                 }
                 away_pitcher = g["teams"]["away"].get("probablePitcher", {})
                 home_pitcher = g["teams"]["home"].get("probablePitcher", {})
                 game["away_pitcher"] = away_pitcher.get("fullName", "TBD")
                 game["home_pitcher"] = home_pitcher.get("fullName", "TBD")
+                game["away_pitcher_id"] = away_pitcher.get("id")
+                game["home_pitcher_id"] = home_pitcher.get("id")
                 games.append(game)
         return label, games
     except Exception as e:
         st.warning(f"Could not load games: {e}")
         return label, []
+
+
+# ---------------------------------------------------------------------------
+# Batter-vs-pitcher matchups — for the "Rivalry Matchups" section
+# ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=43200, show_spinner=False)
+def get_team_hitters(team_id: int) -> list[dict]:
+    """Active-roster position players for a team (used as the opposing lineup
+    pool — more reliable than posted lineups, which only appear ~2h pre-game)."""
+    if not team_id:
+        return []
+    url = f"{MLB_API_BASE}/teams/{team_id}/roster?rosterType=active"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        out = []
+        for p in resp.json().get("roster", []):
+            if p.get("position", {}).get("type") != "Pitcher":
+                out.append({
+                    "id": p["person"]["id"],
+                    "name": p["person"]["fullName"],
+                    "pos": p["position"].get("abbreviation", ""),
+                })
+        return out
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_batter_vs_pitcher(batter_id: int, pitcher_id: int) -> dict:
+    """Career batter-vs-pitcher totals (vsPlayerTotal split). Empty dict if the
+    pair has never faced each other or the lookup fails."""
+    if not batter_id or not pitcher_id:
+        return {}
+    url = (
+        f"{MLB_API_BASE}/people/{batter_id}/stats?stats=vsPlayerTotal&group=hitting"
+        f"&opposingPlayerId={pitcher_id}&sportId=1"
+    )
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        for grp in resp.json().get("stats", []):
+            for sp in grp.get("splits", []):
+                s = sp.get("stat", {})
+                return {
+                    "PA": s.get("plateAppearances", 0),
+                    "AB": s.get("atBats", 0),
+                    "H": s.get("hits", 0),
+                    "2B": s.get("doubles", 0),
+                    "3B": s.get("triples", 0),
+                    "HR": s.get("homeRuns", 0),
+                    "RBI": s.get("rbi", 0),
+                    "BB": s.get("baseOnBalls", 0),
+                    "SO": s.get("strikeOuts", 0),
+                    "AVG": _safe_float(s.get("avg")),
+                    "OBP": _safe_float(s.get("obp")),
+                    "SLG": _safe_float(s.get("slg")),
+                    "OPS": _safe_float(s.get("ops")),
+                }
+        return {}
+    except Exception:
+        return {}
 
 
 @st.cache_data(ttl=300, show_spinner=False)
