@@ -16,6 +16,19 @@ cache.enable()
 MLB_API_BASE = "https://statsapi.mlb.com/api/v1"
 
 
+def _safe_float(val) -> float:
+    """Coerce an MLB API stat to float, tolerating its placeholder strings.
+
+    For players with no innings/at-bats in a window the API returns sentinels
+    like '-.--', '.---', or '*.**' instead of a number; those (and None/blank)
+    all map to 0.0 so a single empty line can't crash a whole leaderboard.
+    """
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 # ---------------------------------------------------------------------------
 # Player name lookup (Statcast only has pitcher names, not batter names)
 # ---------------------------------------------------------------------------
@@ -289,10 +302,10 @@ def _parse_hitting_splits(data: dict) -> pd.DataFrame:
                 "BB": s.get("baseOnBalls", 0),
                 "SO": s.get("strikeOuts", 0),
                 "SB": s.get("stolenBases", 0),
-                "AVG": float(s.get("avg", "0") or "0"),
-                "OBP": float(s.get("obp", "0") or "0"),
-                "SLG": float(s.get("slg", "0") or "0"),
-                "OPS": float(s.get("ops", "0") or "0"),
+                "AVG": _safe_float(s.get("avg")),
+                "OBP": _safe_float(s.get("obp")),
+                "SLG": _safe_float(s.get("slg")),
+                "OPS": _safe_float(s.get("ops")),
             })
     df = pd.DataFrame(rows)
     if df.empty:
@@ -371,28 +384,26 @@ def _parse_pitching_splits(data: dict) -> pd.DataFrame:
             s = entry.get("stat", {})
             player = entry.get("player", {})
             team = entry.get("team", {})
-            ip_str = s.get("inningsPitched", "0")
-            ip = float(ip_str) if ip_str else 0.0
             rows.append({
                 "Name": player.get("fullName", ""),
                 "player_id": player.get("id"),
                 "Team": team.get("abbreviation", ""),
                 "W": s.get("wins", 0),
                 "L": s.get("losses", 0),
-                "ERA": float(s.get("era", "0") or "0"),
+                "ERA": _safe_float(s.get("era")),
                 "G": s.get("gamesPlayed", 0),
                 "GS": s.get("gamesStarted", 0),
-                "IP": ip,
+                "IP": _safe_float(s.get("inningsPitched")),
                 "SO": s.get("strikeOuts", 0),
                 "BB": s.get("baseOnBalls", 0),
                 "H": s.get("hits", 0),
                 "HR": s.get("homeRuns", 0),
                 "ER": s.get("earnedRuns", 0),
-                "WHIP": float(s.get("whip", "0") or "0"),
-                "K9": float(s.get("strikeoutsPer9Inn", "0") or "0"),
-                "BB9": float(s.get("walksPer9Inn", "0") or "0"),
-                "HR9": float(s.get("homeRunsPer9", "0") or "0"),
-                "AVG": float(s.get("avg", "0") or "0"),
+                "WHIP": _safe_float(s.get("whip")),
+                "K9": _safe_float(s.get("strikeoutsPer9Inn")),
+                "BB9": _safe_float(s.get("walksPer9Inn")),
+                "HR9": _safe_float(s.get("homeRunsPer9")),
+                "AVG": _safe_float(s.get("avg")),
             })
     df = pd.DataFrame(rows)
     if df.empty:
@@ -552,7 +563,7 @@ def get_standings() -> pd.DataFrame:
                     "Division": division,
                     "W": team["wins"],
                     "L": team["losses"],
-                    "PCT": float(team["winningPercentage"]),
+                    "PCT": _safe_float(team.get("winningPercentage")),
                     "GB": team.get("gamesBack", "-"),
                     "Streak": team.get("streak", {}).get("streakCode", ""),
                 })
@@ -644,8 +655,7 @@ def get_pitcher_game_log(pitcher_id: int, season: int) -> pd.DataFrame:
                 opponent_obj = entry.get("opponent", {})
                 opponent = opponent_obj.get("abbreviation", opponent_obj.get("name", ""))
 
-                ip_str = s.get("inningsPitched", "0")
-                ip = float(ip_str) if ip_str else 0.0
+                ip = _safe_float(s.get("inningsPitched"))
 
                 rows.append({
                     "date": game_date,
