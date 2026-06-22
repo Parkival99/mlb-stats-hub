@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Logs
+*.log
+
+# Streamlit secrets (never commit credentials)
+.streamlit/secrets.toml
+
+# Claude Code local config
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
