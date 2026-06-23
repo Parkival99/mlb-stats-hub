@@ -188,6 +188,7 @@ def _hitter_quadrant(df: pd.DataFrame):
     _style_plotly(fig)
     fig.update_layout(xaxis_title="Walk Rate (BB%)", yaxis_title="Isolated Power (ISO)",
                       showlegend=False)
+    fig.update_xaxes(ticksuffix="%")  # ticks are percentages (BB/PA), label them as such
     return fig
 
 
