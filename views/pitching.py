@@ -82,23 +82,62 @@ def _leader_charts(df: pd.DataFrame, ip_floor: float):
                           margin=dict(l=20, r=60, t=40, b=20))
         st.plotly_chart(fig, width="stretch")
     with c2:
-        st.markdown("#### Top 15 by K/9 (qualified)")
+        st.markdown("#### Pitcher Profiles — Strikeouts vs. Command")
         qual = df[df["IP"] >= ip_floor]
         pool = qual if not qual.empty else df
-        top = pool.nlargest(15, "K9").sort_values("K9")
-        fig2 = go.Figure(go.Bar(
-            x=top["K9"], y=top["Name"], orientation="h",
-            marker=dict(color=top["ERA"], colorscale=_ERA_SCALE,
-                        colorbar=dict(title="ERA", thickness=10)),
-            customdata=top["ERA"],
-            text=[f"{v:.1f}" for v in top["K9"]],
-            textposition="outside", cliponaxis=False,
-            hovertemplate="<b>%{y}</b><br>K/9 %{x:.2f} · ERA %{customdata:.2f}<extra></extra>",
-        ))
-        _style_plotly(fig2)
-        fig2.update_layout(xaxis_title="K / 9 IP", yaxis_title="",
-                           margin=dict(l=20, r=60, t=40, b=20))
-        st.plotly_chart(fig2, width="stretch")
+        st.plotly_chart(_pitcher_quadrant(pool), width="stretch")
+        st.caption("Dotted lines = sample medians. Bottom-right is best: "
+                   "lots of strikeouts with few walks.")
+
+
+# Quadrant labels: (x-anchor on K/9, y-anchor on BB/9, text). y is BB/9 so
+# "bottom" = good command, "top" = wild.
+_PITCHER_QUADRANTS = [
+    ("right", "bottom", "Dominant"),         # high K/9, low BB/9
+    ("right", "top", "Effectively Wild"),    # high K/9, high BB/9
+    ("left", "bottom", "Finesse / Contact"), # low K/9, low BB/9
+    ("left", "top", "Struggling"),           # low K/9, high BB/9
+]
+
+
+def _pitcher_quadrant(df: pd.DataFrame):
+    """K/9 (x) vs BB/9 (y) scatter split into four pitcher-profile quadrants."""
+    d = df.dropna(subset=["K9", "BB9"])
+    x_med, y_med = d["K9"].median(), d["BB9"].median()
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=d["K9"], y=d["BB9"], mode="markers",
+        marker=dict(size=9, color=d["ERA"], colorscale=_ERA_SCALE, showscale=True,
+                    colorbar=dict(title="ERA", thickness=10),
+                    line=dict(width=0.5, color="#0E1117")),
+        text=d["Name"], customdata=d["ERA"],
+        hovertemplate="<b>%{text}</b><br>K/9 %{x:.2f}<br>BB/9 %{y:.2f}"
+                      "<br>ERA %{customdata:.2f}<extra></extra>",
+        showlegend=False,
+    ))
+    # Label the biggest strikeout arms.
+    labels = d.nlargest(min(12, len(d)), "K9")
+    fig.add_trace(go.Scatter(
+        x=labels["K9"], y=labels["BB9"], mode="text",
+        text=labels["Name"], textposition="top center",
+        textfont=dict(size=9, color="#EAEAEA"), hoverinfo="skip", showlegend=False,
+    ))
+    fig.add_vline(x=x_med, line=dict(color="#8888AA", width=1, dash="dot"))
+    fig.add_hline(y=y_med, line=dict(color="#8888AA", width=1, dash="dot"))
+
+    xr = (d["K9"].min(), d["K9"].max())
+    yr = (d["BB9"].min(), d["BB9"].max())
+    corner = {"right": xr[1], "left": xr[0], "top": yr[1], "bottom": yr[0]}
+    for xa, ya, label in _PITCHER_QUADRANTS:
+        fig.add_annotation(x=corner[xa], y=corner[ya], text=label, showarrow=False,
+                           xanchor=xa, yanchor=ya,
+                           font=dict(size=12, color="#C9C9E0"),
+                           bgcolor="rgba(14,17,23,0.55)")
+    _style_plotly(fig)
+    fig.update_layout(xaxis_title="Strikeouts per 9 (K/9)", yaxis_title="Walks per 9 (BB/9)",
+                      showlegend=False)
+    return fig
 
 
 def render():

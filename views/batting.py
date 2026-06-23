@@ -51,7 +51,6 @@ def _style_plotly(fig):
         font_color=_FONT,
         margin=dict(l=20, r=20, t=40, b=20),
         coloraxis_colorbar=dict(thickness=10),
-        title_font_size=15,
     )
     fig.update_xaxes(gridcolor="rgba(255,255,255,0.06)", zeroline=False)
     fig.update_yaxes(gridcolor="rgba(255,255,255,0.06)", zeroline=False)
@@ -128,26 +127,59 @@ def _leader_charts(df: pd.DataFrame):
         st.plotly_chart(fig, width="stretch")
 
     with c2:
-        st.markdown("#### OPS Breakdown — On-Base vs. Slugging")
-        fig2 = go.Figure()
-        fig2.add_bar(x=top["OBP"], y=top["Name"], orientation="h", name="OBP",
-                     marker_color="#4C9BE6",
-                     hovertemplate="<b>%{y}</b><br>OBP %{x:.3f}<extra></extra>")
-        fig2.add_bar(x=top["SLG"], y=top["Name"], orientation="h", name="SLG",
-                     marker_color=_RED,
-                     hovertemplate="<b>%{y}</b><br>SLG %{x:.3f}<extra></extra>")
-        _style_plotly(fig2)
-        fig2.update_layout(
-            barmode="stack", xaxis_title="OBP + SLG = OPS", yaxis_title="",
-            legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
-            margin=dict(l=20, r=70, t=50, b=20),
-        )
-        # Label total OPS at the end of each stacked bar.
-        for name, obp, slg in zip(top["Name"], top["OBP"], top["SLG"]):
-            fig2.add_annotation(x=obp + slg, y=name, text=f"{obp + slg:.3f}",
-                                showarrow=False, xanchor="left", xshift=4,
-                                font=dict(color="#EAEAEA", size=10))
-        st.plotly_chart(fig2, width="stretch")
+        st.markdown("#### Hitter Profiles — OBP vs. Slugging")
+        st.plotly_chart(_hitter_quadrant(df), width="stretch")
+        st.caption("Dotted lines = sample medians. Quadrants split hitters by "
+                   "on-base ability vs. power.")
+
+
+# Quadrant labels by position: (x-anchor, y-anchor, text)
+_HITTER_QUADRANTS = [
+    ("right", "top", "All-Around"),       # high OBP, high SLG
+    ("left", "top", "Slugger"),           # low OBP, high SLG
+    ("right", "bottom", "Table-Setter"),  # high OBP, low SLG
+    ("left", "bottom", "Needs More Time"),  # low OBP, low SLG
+]
+
+
+def _hitter_quadrant(df: pd.DataFrame):
+    """OBP (x) vs SLG (y) scatter split into four hitter-profile quadrants."""
+    d = df.dropna(subset=["OBP", "SLG"])
+    x_med, y_med = d["OBP"].median(), d["SLG"].median()
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=d["OBP"], y=d["SLG"], mode="markers",
+        marker=dict(size=9, color=d["OPS"], colorscale=_RED_SCALE, showscale=True,
+                    colorbar=dict(title="OPS", thickness=10),
+                    line=dict(width=0.5, color="#0E1117")),
+        text=d["Name"], customdata=d["OPS"],
+        hovertemplate="<b>%{text}</b><br>OBP %{x:.3f}<br>SLG %{y:.3f}"
+                      "<br>OPS %{customdata:.3f}<extra></extra>",
+        showlegend=False,
+    ))
+    # Name the standouts (top OPS) without cluttering the whole field.
+    labels = d.nlargest(min(12, len(d)), "OPS")
+    fig.add_trace(go.Scatter(
+        x=labels["OBP"], y=labels["SLG"], mode="text",
+        text=labels["Name"], textposition="top center",
+        textfont=dict(size=9, color="#EAEAEA"), hoverinfo="skip", showlegend=False,
+    ))
+    fig.add_vline(x=x_med, line=dict(color="#8888AA", width=1, dash="dot"))
+    fig.add_hline(y=y_med, line=dict(color="#8888AA", width=1, dash="dot"))
+
+    xr = (d["OBP"].min(), d["OBP"].max())
+    yr = (d["SLG"].min(), d["SLG"].max())
+    corner = {"right": xr[1], "left": xr[0], "top": yr[1], "bottom": yr[0]}
+    for xa, ya, label in _HITTER_QUADRANTS:
+        fig.add_annotation(x=corner[xa], y=corner[ya], text=label, showarrow=False,
+                           xanchor=xa, yanchor=ya,
+                           font=dict(size=12, color="#C9C9E0"),
+                           bgcolor="rgba(14,17,23,0.55)")
+    _style_plotly(fig)
+    fig.update_layout(xaxis_title="On-Base % (OBP)", yaxis_title="Slugging % (SLG)",
+                      showlegend=False)
+    return fig
 
 
 def render():
