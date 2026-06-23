@@ -127,49 +127,58 @@ def _leader_charts(df: pd.DataFrame):
         st.plotly_chart(fig, width="stretch")
 
     with c2:
-        st.markdown("#### Hitter Profiles — OBP vs. Slugging")
+        st.markdown("#### Hitter Profiles — Discipline vs. Power")
         st.plotly_chart(_hitter_quadrant(df), width="stretch")
-        st.caption("Dotted lines = sample medians. Quadrants split hitters by "
-                   "on-base ability vs. power.")
+        st.caption("Walk rate (BB%) vs. isolated power (ISO = SLG − AVG) — two "
+                   "independent skills, so power can't inflate the on-base axis. "
+                   "Dotted lines = sample medians; color = OPS.")
 
 
-# Quadrant labels by position: (x-anchor, y-anchor, text)
+# Quadrant labels by position: (x-anchor on BB%, y-anchor on ISO, text)
 _HITTER_QUADRANTS = [
-    ("right", "top", "All-Around"),       # high OBP, high SLG
-    ("left", "top", "Slugger"),           # low OBP, high SLG
-    ("right", "bottom", "Table-Setter"),  # high OBP, low SLG
-    ("left", "bottom", "Needs More Time"),  # low OBP, low SLG
+    ("right", "top", "Complete Hitter"),      # high BB%, high ISO
+    ("left", "top", "Free-Swinging Slugger"),  # low BB%, high ISO
+    ("right", "bottom", "On-Base Grinder"),   # high BB%, low ISO
+    ("left", "bottom", "Needs More Time"),    # low BB%, low ISO
 ]
 
 
 def _hitter_quadrant(df: pd.DataFrame):
-    """OBP (x) vs SLG (y) scatter split into four hitter-profile quadrants."""
-    d = df.dropna(subset=["OBP", "SLG"])
-    x_med, y_med = d["OBP"].median(), d["SLG"].median()
+    """Walk rate (x) vs isolated power (y) — four hitter-profile quadrants.
+
+    BB% and ISO share no terms (unlike OBP/SLG, which both contain hits), so a
+    masher with no walks lands in 'Free-Swinging Slugger', not 'Complete'.
+    """
+    d = df.dropna(subset=["BB", "PA", "SLG", "AVG"]).copy()
+    pa = d["PA"].clip(lower=1)
+    d["BBpct"] = d["BB"] / pa * 100
+    d["ISO"] = d["SLG"] - d["AVG"]
+    d["Kpct"] = d["SO"] / pa * 100
+    x_med, y_med = d["BBpct"].median(), d["ISO"].median()
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=d["OBP"], y=d["SLG"], mode="markers",
+        x=d["BBpct"], y=d["ISO"], mode="markers",
         marker=dict(size=9, color=d["OPS"], colorscale=_RED_SCALE, showscale=True,
                     colorbar=dict(title="OPS", thickness=10),
                     line=dict(width=0.5, color="#0E1117")),
-        text=d["Name"], customdata=d["OPS"],
-        hovertemplate="<b>%{text}</b><br>OBP %{x:.3f}<br>SLG %{y:.3f}"
-                      "<br>OPS %{customdata:.3f}<extra></extra>",
+        text=d["Name"], customdata=d[["OPS", "Kpct"]].values,
+        hovertemplate="<b>%{text}</b><br>BB%% %{x:.1f}%%<br>ISO %{y:.3f}"
+                      "<br>OPS %{customdata[0]:.3f}<br>K%% %{customdata[1]:.1f}%%<extra></extra>",
         showlegend=False,
     ))
     # Name the standouts (top OPS) without cluttering the whole field.
     labels = d.nlargest(min(12, len(d)), "OPS")
     fig.add_trace(go.Scatter(
-        x=labels["OBP"], y=labels["SLG"], mode="text",
+        x=labels["BBpct"], y=labels["ISO"], mode="text",
         text=labels["Name"], textposition="top center",
         textfont=dict(size=9, color="#EAEAEA"), hoverinfo="skip", showlegend=False,
     ))
     fig.add_vline(x=x_med, line=dict(color="#8888AA", width=1, dash="dot"))
     fig.add_hline(y=y_med, line=dict(color="#8888AA", width=1, dash="dot"))
 
-    xr = (d["OBP"].min(), d["OBP"].max())
-    yr = (d["SLG"].min(), d["SLG"].max())
+    xr = (d["BBpct"].min(), d["BBpct"].max())
+    yr = (d["ISO"].min(), d["ISO"].max())
     corner = {"right": xr[1], "left": xr[0], "top": yr[1], "bottom": yr[0]}
     for xa, ya, label in _HITTER_QUADRANTS:
         fig.add_annotation(x=corner[xa], y=corner[ya], text=label, showarrow=False,
@@ -177,7 +186,7 @@ def _hitter_quadrant(df: pd.DataFrame):
                            font=dict(size=12, color="#C9C9E0"),
                            bgcolor="rgba(14,17,23,0.55)")
     _style_plotly(fig)
-    fig.update_layout(xaxis_title="On-Base % (OBP)", yaxis_title="Slugging % (SLG)",
+    fig.update_layout(xaxis_title="Walk Rate (BB%)", yaxis_title="Isolated Power (ISO)",
                       showlegend=False)
     return fig
 
